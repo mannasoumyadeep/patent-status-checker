@@ -1,6 +1,7 @@
 import os
 import time
 import streamlit as st
+import platform
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -12,6 +13,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from openpyxl import load_workbook, Workbook
 from datetime import datetime
 import json
+import subprocess
 
 # Constants
 APPLICATION_STATUS_URL = "https://iprsearch.ipindia.gov.in/PublicSearch/PublicationSearch/ApplicationStatus"
@@ -48,16 +50,38 @@ class ApplicationService:
         options.add_argument("--disable-gpu")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-features=NetworkService")
+        options.add_argument('--disable-blink-features=AutomationControlled')
         options.page_load_strategy = 'eager'
         
         try:
-            # Use ChromeDriverManager to handle driver installation
-            service = ChromeService(ChromeDriverManager().install())
+            if platform.system() == "Windows":
+                # Windows setup
+                service = ChromeService(ChromeDriverManager().install())
+            else:
+                # Linux (Debian) setup
+                os.environ['DISPLAY'] = ':99'
+                options.binary_location = '/usr/bin/chromium'
+                service = ChromeService('/usr/bin/chromedriver')
+            
             driver = webdriver.Chrome(service=service, options=options)
             wait = WebDriverWait(driver, 15)
             return driver, wait
+            
         except Exception as e:
             st.error(f"Error setting up Chrome driver: {str(e)}")
+            if platform.system() != "Windows":
+                try:
+                    # Log Chrome and ChromeDriver paths
+                    chrome_path = subprocess.getoutput('which chromium')
+                    st.error(f"Chrome path: {chrome_path}")
+                    driver_path = subprocess.getoutput('which chromedriver')
+                    st.error(f"ChromeDriver path: {driver_path}")
+                    # List Chrome-related binaries
+                    st.error("Chrome binaries:")
+                    st.error(subprocess.getoutput('ls -l /usr/bin/chromium*'))
+                except:
+                    st.error("Could not check system paths")
             raise
 
     def process_application_number(self, application_number, retry_count=0):
@@ -258,10 +282,10 @@ def main():
                         try:
                             result = service.process_application_number(app_num)
                             results.append(result)
-                            progress_bar.progress((idx + 1) / len(application_numbers))
                         except Exception as e:
                             st.error(f"Error processing {app_num}: {str(e)}")
                             results.append((app_num, None))
+                        progress_bar.progress((idx + 1) / len(application_numbers))
 
                     # Export results
                     output_file = "output.xlsx"
