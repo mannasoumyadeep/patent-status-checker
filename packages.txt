@@ -1,2 +1,2 @@
-chromium
-chromium-driver
+playwright
+python3-playwright
